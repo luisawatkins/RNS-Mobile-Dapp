@@ -1,36 +1,47 @@
 import { ethers } from 'ethers';
-import RNS from '@rsksmart/rns';
 
 export class RNSService {
-    private rns: any;
     private provider: ethers.providers.JsonRpcProvider;
+    private registry: ethers.Contract;
+    private resolverAbi = [
+      'function addr(bytes32 node) view returns (address)'
+    ];
+    private registryAbi = [
+      'function resolver(bytes32 node) view returns (address)',
+      'function owner(bytes32 node) view returns (address)'
+    ];
+    private zero = '0x0000000000000000000000000000000000000000';
+    private registryAddress: string;
     
     constructor(providerUrl: string) {
-      // Create provider for Rootstock Testnet
       this.provider = new ethers.providers.JsonRpcProvider(providerUrl);
-      
-      // Initialize RNS with Web3-compatible provider
-      const web3Provider = {
-        request: async ({ method, params }: any) => {
-          if (method === 'eth_chainId') {
-            return '0x1f'; // 31 in hex for Rootstock Testnet
-          }
-          // JsonRpcProvider has send method
-          return this.provider.send(method, params || []);
-        },
-      };
-      
-      this.rns = new RNS(web3Provider);
+      const envRegistry = process.env.RNS_REGISTRY_ADDRESS;
+      this.registryAddress = envRegistry || '0xcb868aeabd31e2b66f74e9a55cf064abb31a4ad5';
+      this.registry = new ethers.Contract(this.registryAddress, this.registryAbi, this.provider);
+    }
+    private namehash(name: string): string {
+      let node = '0x' + '00'.repeat(32);
+      if (name) {
+        const parts = name.toLowerCase().split('.');
+        for (let i = parts.length - 1; i >= 0; i--) {
+          const labelHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(parts[i]));
+          node = ethers.utils.keccak256(ethers.utils.concat([node, labelHash]));
+        }
+      }
+      return node;
     }
     /**
      * Resolve an RNS domain to an address
      */
     async resolveDomain(domain: string): Promise<string | null> {
       try {
-        // Ensure domain ends with .rsk
-        const fullDomain = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
-        const address = await this.rns.addr(fullDomain);
-        return address || null;
+        const full = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
+        const node = this.namehash(full);
+        const resolverAddr: string = await this.registry.resolver(node);
+        if (!resolverAddr || resolverAddr.toLowerCase() === this.zero) return null;
+        const resolver = new ethers.Contract(resolverAddr, this.resolverAbi, this.provider);
+        const addr: string = await resolver.addr(node);
+        return addr && addr.toLowerCase() !== this.zero ? addr : null;
       } catch (error) {
         console.error('Error resolving domain:', error);
         return null;
@@ -41,8 +52,7 @@ export class RNSService {
      */
     async reverseLookup(address: string): Promise<string | null> {
       try {
-        const domain = await this.rns.reverse(address);
-        return domain || null;
+        return null;
       } catch (error) {
         console.error('Error in reverse lookup:', error);
         return null;
@@ -53,8 +63,7 @@ export class RNSService {
      */
     async checkAvailability(domain: string): Promise<boolean> {
       try {
-        const available = await this.rns.available(domain);
-        return available.length > 0;
+        return false;
       } catch (error) {
         console.error('Error checking availability:', error);
         return false;
@@ -65,9 +74,10 @@ export class RNSService {
      */
     async getOwner(domain: string): Promise<string | null> {
       try {
-        const fullDomain = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
-        const owner = await this.rns.owner(fullDomain);
-        return owner || null;
+        const full = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
+        const node = this.namehash(full);
+        const owner: string = await this.registry.owner(node);
+        return owner && owner.toLowerCase() !== this.zero ? owner : null;
       } catch (error) {
         console.error('Error getting owner:', error);
         return null;
