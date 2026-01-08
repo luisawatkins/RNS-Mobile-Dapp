@@ -36,9 +36,26 @@ export const useSendTransaction = () => {
     }
   };
 
+  const estimateGas = async (to: string, value: bigint) => {
+    try {
+      const provider = new ethers.providers.JsonRpcProvider(
+        process.env.ROOTSTOCK_RPC_URL
+      );
+      const estimate = await provider.estimateGas({
+        to,
+        value: ethers.BigNumber.from(value.toString()),
+      });
+      return estimate.toString();
+    } catch (error) {
+      console.error('Gas estimation failed:', error);
+      throw error;
+    }
+  };
+
   return {
     sendTransaction,
     waitForTransaction,
+    estimateGas,
     loading,
     txHash,
   };

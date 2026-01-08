@@ -12,6 +12,7 @@ import {
 import { useAccount, useBalance } from 'wagmi';
 import { parseEther } from 'viem';
 import { useRNS } from '../hooks/useRNS';
+import { RNSService } from '../services/rnsService';
 import { useSendTransaction } from '../hooks/useSendTransaction';
 
 export const SendScreen: React.FC = () => {
@@ -40,8 +41,11 @@ export const SendScreen: React.FC = () => {
       } catch (error) {
         console.error('Failed to resolve RNS name:', error);
       }
-    } else if (value.startsWith('0x') && value.length === 42) {
-      setResolvedAddress(value);
+    } else {
+      const checksummed = RNSService.validateAddress(value);
+      if (checksummed) {
+        setResolvedAddress(checksummed);
+      }
     }
   };
 

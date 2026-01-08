@@ -3,21 +3,33 @@ import { ethers } from 'ethers';
 export class RNSService {
     private provider: ethers.providers.JsonRpcProvider;
     private registry: ethers.Contract;
+    private registrar: ethers.Contract;
     private resolverAbi = [
       'function addr(bytes32 node) view returns (address)'
     ];
     private registryAbi = [
       'function resolver(bytes32 node) view returns (address)',
-      'function owner(bytes32 node) view returns (address)'
+      'function owner(bytes32 node) view returns (address)',
+      'function setResolver(bytes32 node, address resolver)'
+    ];
+    private registrarAbi = [
+        'function register(string name, address owner, uint256 duration)',
+        'function renew(string name, uint256 duration)'
     ];
     private zero = '0x0000000000000000000000000000000000000000';
     private registryAddress: string;
-    
+    private registrarAddress: string;
+
     constructor(providerUrl: string) {
       this.provider = new ethers.providers.JsonRpcProvider(providerUrl);
       const envRegistry = process.env.RNS_REGISTRY_ADDRESS;
+      const envRegistrar = process.env.RNS_REGISTRAR_ADDRESS;
+      
       this.registryAddress = envRegistry || '0xcb868aeabd31e2b66f74e9a55cf064abb31a4ad5';
+      this.registrarAddress = envRegistrar || '0x0000000000000000000000000000000000000000';
+      
       this.registry = new ethers.Contract(this.registryAddress, this.registryAbi, this.provider);
+      this.registrar = new ethers.Contract(this.registrarAddress, this.registrarAbi, this.provider);
     }
     private namehash(name: string): string {
       let node = '0x' + '00'.repeat(32);
@@ -90,9 +102,13 @@ export class RNSService {
     async registerDomain(domain: string, duration: number = 1): Promise<string> {
       try {
         const fullDomain = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
-        // In production, this would interact with the RNS registrar contract
         console.log(`Registering domain ${fullDomain} for ${duration} year(s)`);
-        return `0x${Math.random().toString(16).substring(2, 66)}`; // Mock tx hash
+        
+        // Requires a signer
+        const signer = this.provider.getSigner();
+        const owner = await signer.getAddress();
+        const tx = await this.registrar.connect(signer).register(fullDomain, owner, duration);
+        return tx.hash;
       } catch (error) {
         console.error('Error registering domain:', error);
         throw error;
@@ -105,9 +121,12 @@ export class RNSService {
     async setResolver(domain: string, resolverAddress: string): Promise<string> {
       try {
         const fullDomain = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
-        // In production, this would interact with the RNS registry contract
+        const node = this.namehash(fullDomain);
         console.log(`Setting resolver for ${fullDomain} to ${resolverAddress}`);
-        return `0x${Math.random().toString(16).substring(2, 66)}`; // Mock tx hash
+        
+        const signer = this.provider.getSigner();
+        const tx = await this.registry.connect(signer).setResolver(node, resolverAddress);
+        return tx.hash;
       } catch (error) {
         console.error('Error setting resolver:', error);
         throw error;
@@ -120,9 +139,11 @@ export class RNSService {
     async renewDomain(domain: string, duration: number = 1): Promise<string> {
       try {
         const fullDomain = domain.endsWith('.rsk') ? domain : `${domain}.rsk`;
-        // In production, this would interact with the RNS renewal contract
         console.log(`Renewing domain ${fullDomain} for ${duration} year(s)`);
-        return `0x${Math.random().toString(16).substring(2, 66)}`; // Mock tx hash
+        
+        const signer = this.provider.getSigner();
+        const tx = await this.registrar.connect(signer).renew(fullDomain, duration);
+        return tx.hash;
       } catch (error) {
         console.error('Error renewing domain:', error);
         throw error;
@@ -135,11 +156,22 @@ export class RNSService {
     async getUserDomains(address: string): Promise<string[]> {
       try {
         // In production, this would query The Graph or RNS contracts
-        // Mock implementation returns sample domains
-        return ['user.rsk', 'wallet.rsk', 'portfolio.rsk'];
+        // Requires Subgraph integration
+        return [];
       } catch (error) {
         console.error('Error getting user domains:', error);
         return [];
+      }
+    }
+
+    /**
+     * Validate and checksum address
+     */
+    static validateAddress(address: string): string | null {
+      try {
+        return ethers.utils.getAddress(address);
+      } catch (e) {
+        return null;
       }
     }
 
