@@ -61,6 +61,7 @@
   },
   "overrides": {
     "ws": "^8.17.1",
+    "fast-xml-parser": "5.3.4",
     "yargs-parser": "^13.1.2",
     "y18n": "^4.0.1",
     "validator": "^13.15.20",
